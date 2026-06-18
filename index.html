@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コンビニ割高トラッカー</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --red: #e60012;
+            --green: #00893e;
+            --orange: #ff6600;
+            --light-gray: #f4f4f4;
+            --gray: #888;
+            --dark: #222;
+        }
+
+        body {
+            font-family: 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
+            background: var(--light-gray);
+            color: var(--dark);
+            min-height: 100vh;
+        }
+
+        /* ヘッダー */
+        .header {
+            background: var(--red);
+            background-image: repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 12px,
+                rgba(0,0,0,0.08) 12px,
+                rgba(0,0,0,0.08) 24px
+            );
+            color: white;
+            padding: 14px 16px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+        }
+
+        .header h1 { font-size: 1.3rem; font-weight: bold; letter-spacing: 0.04em; }
+        .header p  { font-size: 0.72rem; opacity: 0.9; margin-top: 3px; }
+
+        /* タブ */
+        .tabs {
+            display: flex;
+            background: white;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 13px 8px;
+            border: none;
+            background: white;
+            font-size: 0.88rem;
+            font-weight: bold;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            color: var(--gray);
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            color: var(--red);
+            border-bottom-color: var(--red);
+        }
+
+        /* コンテンツ */
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 14px;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* カード */
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            margin-bottom: 12px;
+        }
+
+        /* フォーム */
+        .section-title {
+            font-size: 0.82rem;
+            font-weight: bold;
+            color: var(--green);
+            margin: 14px 0 10px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid var(--green);
+        }
+
+        .section-title:first-child { margin-top: 0; }
+
+        .form-group { margin-bottom: 12px; }
+
+        label {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: bold;
+            color: var(--gray);
+            margin-bottom: 4px;
+        }
+
+        .req  { color: var(--red); margin-left: 2px; }
+        .opt  { font-weight: normal; font-size: 0.72rem; color: #aaa; margin-left: 4px; }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            background: white;
+            transition: border-color 0.2s;
+            -webkit-appearance: none;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--red);
+        }
+
+        textarea { resize: vertical; min-height: 68px; }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--red);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 6px;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .submit-btn:hover  { background: #c0000f; }
+        .submit-btn:active { transform: scale(0.98); }
+        .submit-btn:disabled { background: #bbb; cursor: not-allowed; }
+
+        /* 統計 */
+        .stats-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 10px 6px;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        }
+
+        .stat-value { font-size: 1.3rem; font-weight: bold; color: var(--red); }
+        .stat-label { font-size: 0.68rem; color: var(--gray); margin-top: 2px; }
+
+        /* 検索 */
+        .search-wrap { position: relative; margin-bottom: 12px; }
+        .search-wrap input { padding-left: 38px; }
+        .search-icon {
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1rem;
+            pointer-events: none;
+        }
+
+        /* 商品カード */
+        .product-card {
+            background: white;
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            margin-bottom: 10px;
+            border-left: 4px solid var(--red);
+        }
+
+        .product-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 9px;
+            flex-wrap: wrap;
+        }
+
+        .product-name { font-size: 1rem; font-weight: bold; flex: 1; min-width: 100px; }
+
+        .category-badge {
+            background: #f0f0f0;
+            color: #666;
+            font-size: 0.68rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        /* 価格行 */
+        .price-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+
+        .price-item { text-align: center; }
+        .price-label { font-size: 0.68rem; color: var(--gray); white-space: nowrap; }
+        .price-value { font-size: 1.05rem; font-weight: bold; }
+        .price-value.conv  { color: var(--red); }
+        .price-value.other { color: var(--green); }
+        .price-arrow { color: #aaa; font-size: 1.1rem; }
+
+        /* バッジ */
+        .markup-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: bold;
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .badge-high { background: #ffe5e5; color: var(--red); }
+        .badge-mid  { background: #fff3e0; color: var(--orange); }
+        .badge-low  { background: #fffde0; color: #b8860b; }
+        .badge-none { background: #f0f0f0; color: #999; }
+
+        .diff-text { font-size: 0.75rem; color: #999; }
+
+        /* フッター */
+        .product-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            font-size: 0.73rem;
+            color: #aaa;
+        }
+
+        .memo-text {
+            font-size: 0.76rem;
+            color: #999;
+            font-style: italic;
+            margin-top: 5px;
+            line-height: 1.4;
+        }
+
+        .delete-btn {
+            background: none;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 3px 10px;
+            font-size: 0.73rem;
+            color: #aaa;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .delete-btn:hover { border-color: var(--red); color: var(--red); }
+
+        /* 空・ローディング */
+        .loading { text-align: center; padding: 40px; color: #bbb; font-size: 0.9rem; }
+        .empty   { text-align: center; padding: 40px; color: #bbb; font-size: 0.88rem; }
+
+        /* トースト */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(30,30,30,0.92);
+            color: white;
+            padding: 10px 22px;
+            border-radius: 30px;
+            font-size: 0.88rem;
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🏪 コンビニ割高トラッカー</h1>
+    <p>コンビニ vs スーパー・薬局 価格比較</p>
+</div>
+
+<div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('register')">📝 登録</button>
+    <button class="tab-btn"        onclick="switchTab('list')">📊 一覧</button>
+</div>
+
+<div class="container">
+
+    <!-- ===== 登録タブ ===== -->
+    <div id="tab-register" class="tab-content active">
+        <form id="register-form" class="card">
+
+            <div class="section-title">🏷️ 商品情報</div>
+
+            <div class="form-group">
+                <label>商品名 <span class="req">*</span></label>
+                <input type="text" id="name" placeholder="例：おにぎり（鮭）" required>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>カテゴリ <span class="req">*</span></label>
+                    <select id="category" required>
+                        <option value="">選択してください</option>
+                        <option>食品</option>
+                        <option>飲料</option>
+                        <option>お菓子</option>
+                        <option>冷凍食品</option>
+                        <option>日用品</option>
+                        <option>医薬品</option>
+                        <option>アルコール</option>
+                        <option>その他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>購入日 <span class="req">*</span></label>
+                    <input type="date" id="purchased_at" required>
+                </div>
+            </div>
+
+            <div class="section-title">🏪 コンビニ情報</div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>コンビニ名 <span class="req">*</span></label>
+                    <select id="convenience_store" required>
+                        <option value="">選択してください</option>
+                        <option>セブン-イレブン</option>
+                        <option>ローソン</option>
+                        <option>ファミリーマート</option>
+                        <option>ミニストップ</option>
+                        <option>デイリーヤマザキ</option>
+                        <option>その他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>コンビニ価格 <span class="req">*</span></label>
+                    <input type="number" id="convenience_price" placeholder="例：198" min="0" required>
+                </div>
+            </div>
+
+            <div class="section-title">🛒 比較店舗情報<span class="opt">（任意）</span></div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>対抗店舗名 <span class="opt">任意</span></label>
+                    <input type="text" id="other_store" placeholder="例：イオン">
+                </div>
+                <div class="form-group">
+                    <label>対抗価格 <span class="opt">任意</span></label>
+                    <input type="number" id="other_price" placeholder="例：128" min="0">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>メモ <span class="opt">任意</span></label>
+                <textarea id="memo" placeholder="気づいたこと、感想など..."></textarea>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submit-btn">💾 登録する</button>
+        </form>
+    </div>
+
+    <!-- ===== 一覧タブ ===== -->
+    <div id="tab-list" class="tab-content">
+        <div class="stats-row" id="stats-row">
+            <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">登録件数</div></div>
+            <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">平均割高率</div></div>
+            <div class="stat-card"><div class="stat-value">-</div><div class="stat-label">余計な出費合計</div></div>
+        </div>
+
+        <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search-input" placeholder="商品名で検索..." oninput="filterProducts()">
+        </div>
+
+        <div id="products-list">
+            <div class="loading">読み込み中...</div>
+        </div>
+    </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    const SUPABASE_URL = 'https://hegqzfpkovqipvdwzyri.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlZ3F6ZnBrb3ZxaXB2ZHd6eXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3NzQ5MDUsImV4cCI6MjA5NzM1MDkwNX0.h7AyY9Z1Es1X1pxgE33urRHMIGOfGH17J-Ir7DbM3j0';
+
+    const { createClient } = window.supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let allProducts = [];
+
+    // 今日の日付をセット
+    document.getElementById('purchased_at').valueAsDate = new Date();
+
+    // タブ切り替え
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+            btn.classList.toggle('active', (tab === 'register' && i === 0) || (tab === 'list' && i === 1));
+        });
+        document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+        document.getElementById('tab-list').classList.toggle('active', tab === 'list');
+        if (tab === 'list') loadProducts();
+    }
+
+    // トースト通知
+    function showToast(msg, ms = 2500) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), ms);
+    }
+
+    // 登録フォーム送信
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.textContent = '保存中...';
+
+        const otherStore    = document.getElementById('other_store').value.trim();
+        const otherPriceRaw = document.getElementById('other_price').value;
+
+        const payload = {
+            name:               document.getElementById('name').value.trim(),
+            category:           document.getElementById('category').value,
+            convenience_store:  document.getElementById('convenience_store').value,
+            convenience_price:  parseInt(document.getElementById('convenience_price').value, 10),
+            other_store:        otherStore    || null,
+            other_price:        otherPriceRaw ? parseInt(otherPriceRaw, 10) : null,
+            purchased_at:       document.getElementById('purchased_at').value,
+            memo:               document.getElementById('memo').value.trim() || null,
+        };
+
+        const { error } = await db.from('products').insert([payload]);
+
+        btn.disabled = false;
+        btn.textContent = '💾 登録する';
+
+        if (error) {
+            showToast('❌ 保存に失敗しました：' + error.message);
+        } else {
+            showToast('✅ 登録しました！');
+            e.target.reset();
+            document.getElementById('purchased_at').valueAsDate = new Date();
+        }
+    });
+
+    // 商品一覧を取得
+    async function loadProducts() {
+        document.getElementById('products-list').innerHTML = '<div class="loading">読み込み中...</div>';
+        const { data, error } = await db
+            .from('products')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            document.getElementById('products-list').innerHTML = '<div class="empty">❌ データ取得に失敗しました</div>';
+            return;
+        }
+
+        allProducts = data || [];
+        renderStats();
+        filterProducts();
+    }
+
+    // 統計カードを更新
+    function renderStats() {
+        const compared = allProducts.filter(p => p.other_price != null && p.other_price > 0);
+        const avgMarkup = compared.length > 0
+            ? Math.round(compared.reduce((s, p) => s + (p.convenience_price - p.other_price) / p.other_price * 100, 0) / compared.length)
+            : null;
+        const totalExtra = compared.reduce((s, p) => s + (p.convenience_price - p.other_price), 0);
+
+        document.getElementById('stats-row').innerHTML = `
+            <div class="stat-card">
+                <div class="stat-value">${allProducts.length}</div>
+                <div class="stat-label">登録件数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${avgMarkup !== null ? avgMarkup + '%' : '-'}</div>
+                <div class="stat-label">平均割高率</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">¥${totalExtra.toLocaleString()}</div>
+                <div class="stat-label">余計な出費合計</div>
+            </div>
+        `;
+    }
+
+    // 検索フィルター
+    function filterProducts() {
+        const q = document.getElementById('search-input').value.toLowerCase();
+        const filtered = allProducts.filter(p => p.name.toLowerCase().includes(q));
+        renderProducts(filtered);
+    }
+
+    // 商品カードをレンダリング
+    function renderProducts(list) {
+        const container = document.getElementById('products-list');
+
+        if (list.length === 0) {
+            container.innerHTML = '<div class="empty">📭 商品が見つかりません</div>';
+            return;
+        }
+
+        container.innerHTML = list.map(p => {
+            const hasOther = p.other_price != null && p.other_price > 0;
+            let markupHtml = '';
+            let diffHtml   = '';
+            let priceBlock = '';
+
+            if (hasOther) {
+                const diff = p.convenience_price - p.other_price;
+                const rate = Math.round(diff / p.other_price * 100);
+                const cls  = rate >= 50 ? 'badge-high' : rate >= 20 ? 'badge-mid' : 'badge-low';
+                const sign = diff >= 0 ? '+' : '';
+                markupHtml = `<span class="markup-badge ${cls}">${sign}${rate}%</span>`;
+                diffHtml   = `<span class="diff-text">${sign}¥${diff.toLocaleString()}</span>`;
+                priceBlock = `
+                    <div class="price-item">
+                        <div class="price-label">🏪 ${h(p.convenience_store)}</div>
+                        <div class="price-value conv">¥${p.convenience_price.toLocaleString()}</div>
+                    </div>
+                    <span class="price-arrow">→</span>
+                    <div class="price-item">
+                        <div class="price-label">🛒 ${h(p.other_store || '')}</div>
+                        <div class="price-value other">¥${p.other_price.toLocaleString()}</div>
+                    </div>
+                    ${diffHtml}
+                    ${markupHtml}
+                `;
+            } else {
+                markupHtml = `<span class="markup-badge badge-none">比較データなし</span>`;
+                priceBlock = `
+                    <div class="price-item">
+                        <div class="price-label">🏪 ${h(p.convenience_store)}</div>
+                        <div class="price-value conv">¥${p.convenience_price.toLocaleString()}</div>
+                    </div>
+                    ${markupHtml}
+                `;
+            }
+
+            const dateStr = p.purchased_at ? p.purchased_at.replace(/-/g, '/') : '';
+            const memoHtml = p.memo ? `<div class="memo-text">📝 ${h(p.memo)}</div>` : '';
+
+            return `
+                <div class="product-card">
+                    <div class="product-header">
+                        <span class="product-name">${h(p.name)}</span>
+                        ${p.category ? `<span class="category-badge">${h(p.category)}</span>` : ''}
+                    </div>
+                    <div class="price-row">${priceBlock}</div>
+                    ${memoHtml}
+                    <div class="product-footer">
+                        <span>${dateStr}</span>
+                        <button class="delete-btn" onclick="deleteProduct(${p.id})">🗑️ 削除</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // 削除
+    async function deleteProduct(id) {
+        if (!confirm('この商品データを削除しますか？')) return;
+        const { error } = await db.from('products').delete().eq('id', id);
+        if (error) {
+            showToast('❌ 削除に失敗しました');
+        } else {
+            showToast('🗑️ 削除しました');
+            allProducts = allProducts.filter(p => p.id !== id);
+            renderStats();
+            filterProducts();
+        }
+    }
+
+    // HTMLエスケープ
+    function h(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+</script>
+</body>
+</html>
